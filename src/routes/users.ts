@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { Schema, model } from 'mongoose';
 import jwt from 'jsonwebtoken';
-import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
+import { authMiddleware, type AuthRequest, type JwtPayload } from '../middleware/auth.js';
 
 const userSchema = new Schema({
   id: { type: Number, required: true },
@@ -10,7 +10,6 @@ const userSchema = new Schema({
   email: { type: String, required: true },
   password: { type: String, required: true },
   teacher: { type: Boolean, required: true },
-  
 });
 
 const User = model('User', userSchema);
@@ -194,7 +193,8 @@ router.post('/login', (req: Request, res: Response) => {
       if (!user) {
         return res.status(401).json({ error: 'Invalid email or password' });
       }
-      const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET as string, { expiresIn: '20d' });
+      const payload: JwtPayload = { id: user.id.toString(), email: user.email, teacher: user.teacher };
+      const token = jwt.sign(payload, process.env.JWT_SECRET as string, { expiresIn: '20d' });
       res.json({ token });
     })
     .catch(err => res.status(500).json({ error: 'Failed to login' }));
