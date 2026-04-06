@@ -1,0 +1,21 @@
+{
+  "definition": {
+    "openapi": "3.0.0",
+    "info": {
+      "title": "Nanaya",
+      "version": "1.0.0",
+      "description": "Nanaya Backend API"
+    },
+    "components": {
+      "securitySchemes": {
+        "bearerAuth": {
+          "type": "http",
+          "scheme": "bearer",
+          "bearerFormat": "JWT",
+          "description": "Enter your JWT token from /users/login"
+        }
+      }
+    }
+  },
+  "apis": ["./src/routes/*.ts"]
+}
