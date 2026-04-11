@@ -14,6 +14,12 @@ WORKDIR /app
 COPY strip.sh .
 RUN chmod +x strip.sh
 
+# Run as a non-root user; strip.sh does all work under mktemp dirs in /tmp
+RUN useradd -r -u 1001 -s /sbin/nologin stripper
+USER stripper
+
 # The container reads a raw DOCX from stdin and writes a cleaned DOCX to stdout.
-#   podman run --rm -i --runtime=runsc metadata-stripper < input.docx > output.docx
+#   podman run --rm -i --runtime=runsc --cap-drop=all --security-opt=no-new-privileges \
+#     --network=none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=256m \
+#     --pids-limit=100 --memory=512m metadata-stripper < input.docx > output.docx
 ENTRYPOINT ["/app/strip.sh"]

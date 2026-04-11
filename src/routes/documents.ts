@@ -7,9 +7,32 @@ const STRIPPER_IMAGE = 'localhost/metadata-stripper:latest';
 
 function stripDocxMetadata(docxBase64: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('podman', ['run', '--rm', '-i', '--runtime=runsc', STRIPPER_IMAGE], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const proc = spawn(
+      'podman',
+      [
+        'run',
+        '--rm',
+        '-i',
+        '--runtime=runsc',
+        // Drop every capability
+        '--cap-drop=all',
+        // Block setuid/setgid-based privilege escalation
+        '--security-opt=no-new-privileges',
+        // No network access required
+        '--network=none',
+        // Immutable root filesystem; /tmp is the only writable surface
+        '--read-only',
+        '--tmpfs',
+        '/tmp:rw,noexec,nosuid,size=256m',
+        // Bound resource usage
+        '--pids-limit=100',
+        '--memory=512m',
+        STRIPPER_IMAGE,
+      ],
+      {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }
+    );
 
     const chunks: Buffer[] = [];
     const errChunks: Buffer[] = [];
@@ -20,6 +43,11 @@ function stripDocxMetadata(docxBase64: Buffer): Promise<Buffer> {
     proc.on('error', reject);
 
     proc.on('close', (code) => {
+      if (code === 137) {
+        return reject(
+          new Error('metadata-stripper was killed (SIGKILL), was a zip bomb uploaded? Check logs!!')
+        );
+      }
       if (code !== 0) {
         const stderr = Buffer.concat(errChunks).toString('utf8');
         return reject(new Error(`metadata-stripper exited with code ${code}: ${stderr}`));
