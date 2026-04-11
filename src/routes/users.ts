@@ -3,6 +3,10 @@ import type { Request, Response } from 'express';
 import { Schema, model, type InferSchemaType, type HydratedDocument } from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { authMiddleware, type AuthRequest, type JwtPayload } from '../middleware/auth.js';
+import argon2 from 'argon2';
+
+// Matches the PHC string format for argon2id hashes
+const ARGON2ID_REGEX = /^\$argon2id\$/;
 
 const userSchema = new Schema({
   name: { type: String, required: true },
@@ -136,12 +140,15 @@ router.post('/', (req: Request, res: Response) => {
     'at time',
     new Date().toISOString()
   );
-  const newUser = new User({ name, email, password, teacher, screen_name });
   if (!name || !email || !password || teacher === undefined || !screen_name) {
     return res
       .status(400)
       .json({ error: 'Missing name, email, password, teacher, or screen_name' });
   }
+  if (!ARGON2ID_REGEX.test(password)) {
+    return res.status(400).json({ error: 'Password must be an argon2id hash' });
+  }
+  const newUser = new User({ name, email, password, teacher, screen_name });
   console.log(
     'Creating new user:',
     { name, email, teacher, screen_name },
@@ -222,9 +229,13 @@ router.post('/login', (req: Request, res: Response) => {
   if (!email || !password) {
     return res.status(400).json({ error: 'Missing email or password' });
   }
-  User.findOne({ email, password })
-    .then((user) => {
+  User.findOne({ email })
+    .then(async (user) => {
       if (!user) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+      const valid = await argon2.verify(user.password, password);
+      if (!valid) {
         return res.status(401).json({ error: 'Invalid email or password' });
       }
       const payload: JwtPayload = {

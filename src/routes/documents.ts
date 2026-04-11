@@ -98,10 +98,29 @@ async function processStripJob(
 ): Promise<void> {
   try {
     const strippedData = await stripDocxMetadata(Buffer.from(data, 'base64'));
-    const document = new Document({ userId, filename, data: strippedData, uploadedAt, processedAt: new Date() });
+    const document = new Document({
+      userId,
+      filename,
+      data: strippedData,
+      uploadedAt,
+      processedAt: new Date(),
+    });
     await document.save();
     await StripJob.findByIdAndUpdate(jobId, { status: 'done', documentId: document._id });
-    console.log("User ", userId, " completed strip job:", jobId, "-> document:", document._id, " filename:", filename, " uploadedAt:", uploadedAt, " processedAt:", document.processedAt);
+    console.log(
+      'User ',
+      userId,
+      ' completed strip job:',
+      jobId,
+      '-> document:',
+      document._id,
+      ' filename:',
+      filename,
+      ' uploadedAt:',
+      uploadedAt,
+      ' processedAt:',
+      document.processedAt
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('Error processing strip job:', err);
@@ -162,7 +181,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
 
   const uploadedAt = new Date();
   const job = await new StripJob({ userId }).save();
-  console.log("User ", userId, " created strip job:", job._id);
+  console.log('User ', userId, ' created strip job:', job._id);
   processStripJob(String(job._id), String(userId), filename, data, uploadedAt);
   return res.status(202).json({ jobId: job._id });
 });
@@ -208,7 +227,11 @@ router.get('/strip/:jobId', authMiddleware, async (req: AuthRequest, res) => {
   if (!job || String(job.userId) !== String(req.userId)) {
     return res.status(404).json({ error: 'Job not found' });
   }
-  return res.json({ status: job.status, documentId: job.documentId ?? undefined, error: job.error ?? undefined });
+  return res.json({
+    status: job.status,
+    documentId: job.documentId ?? undefined,
+    error: job.error ?? undefined,
+  });
 });
 
 export default router;
