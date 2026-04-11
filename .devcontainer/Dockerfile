@@ -28,3 +28,6 @@ RUN curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
 
 # Podman config for vscode user
 COPY containers.conf /etc/containers/containers.conf
+
+# Fix git safe directory for vscode user
+RUN git config --global --add safe.directory /workspaces/tohno-backend

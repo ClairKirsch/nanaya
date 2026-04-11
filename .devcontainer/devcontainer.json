@@ -7,12 +7,14 @@
     "ghcr.io/devcontainers/features/github-cli:1": {},
   },
   "mounts": [
-    "source=devcontainer-containers-cache,target=/var/lib/containers,type=volume"
+    "source=devcontainer-containers-cache,target=/var/lib/containers,type=volume",
+    "source=devcontainer-node-modules,target=/workspaces/tohno-backend/node_modules,type=volume"
+
   ],
   "capAdd": ["SYS_ADMIN", "NET_ADMIN", "SYS_PTRACE"],
   "forwardPorts": [3000],
   "containerEnv": { "PODMAN_USERNS": "keep-id" },
-  "postCreateCommand": "npm install",
+  "postCreateCommand": "sudo chown -R vscode:vscode /workspaces/tohno-backend/node_modules && npm install",
   "postStartCommand": "sudo mongod --fork --logpath /tmp/mongod.log --dbpath /var/lib/mongodb",
   "customizations": {
     "vscode": {
