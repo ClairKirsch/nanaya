@@ -4,7 +4,7 @@
   "remoteUser": "vscode",
   "features": {
     "ghcr.io/devcontainers/features/node:1": { "version": "lts" },
-    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   "mounts": [
     "source=devcontainer-containers-cache,target=/var/lib/containers,type=volume",
@@ -16,7 +16,7 @@
   "privileged": true,
   "forwardPorts": [3000],
   "containerEnv": { "PODMAN_USERNS": "keep-id" },
-  "postCreateCommand": "sudo chown -R vscode:vscode /workspaces/tohno-backend/node_modules && npm install && podman build --network=host --isolation=chroot -t localhost/metadata-stripper:latest /workspaces/tohno-backend/docker/metadata-stripper",
+  "postCreateCommand": "sudo chown -R vscode:vscode /workspaces/tohno-backend/node_modules && npm install && podman build --network=host --isolation=chroot -t localhost/mystic-eyes-of-metadata-preception:latest /workspaces/tohno-backend/docker/metadata-stripper",
   "postStartCommand": "sudo mongod --fork --logpath /tmp/mongod.log --dbpath /var/lib/mongodb",
   "customizations": {
     "vscode": {

@@ -48,12 +48,12 @@ export function stripDocxMetadata(docxBase64: Buffer): Promise<Buffer> {
     proc.on('close', (code) => {
       if (code === 137) {
         return reject(
-          new Error('metadata-stripper was killed (SIGKILL), was a zip bomb uploaded? Check logs!!')
+          new Error('Mystic Eyes was killed (SIGKILL), was a zip bomb uploaded? Check logs!!')
         );
       }
       if (code !== 0) {
         const stderr = Buffer.concat(errChunks).toString('utf8');
-        return reject(new Error(`metadata-stripper exited with code ${code}: ${stderr}`));
+        return reject(new Error(`Mystic Eyes exited with code ${code}: ${stderr}`));
       }
       resolve(Buffer.concat(chunks));
     });
@@ -68,6 +68,7 @@ const documentSchema = new Schema({
   filename: String,
   data: Buffer,
   uploadedAt: Date,
+  processedAt: Date,
 });
 const Document = model('Document', documentSchema);
 
@@ -78,6 +79,35 @@ const commentSchema = new Schema({
   createdAt: { type: Date, default: Date.now },
 });
 const Comment = model('Comment', commentSchema);
+
+const stripJobSchema = new Schema({
+  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  status: { type: String, enum: ['pending', 'done', 'failed'], default: 'pending' },
+  documentId: { type: Schema.Types.ObjectId, ref: 'Document', default: null },
+  error: { type: String, default: null },
+  createdAt: { type: Date, default: Date.now },
+});
+const StripJob = model('StripJob', stripJobSchema);
+
+async function processStripJob(
+  jobId: string,
+  userId: string,
+  filename: string,
+  data: string,
+  uploadedAt: Date
+): Promise<void> {
+  try {
+    const strippedData = await stripDocxMetadata(Buffer.from(data, 'base64'));
+    const document = new Document({ userId, filename, data: strippedData, uploadedAt, processedAt: new Date() });
+    await document.save();
+    await StripJob.findByIdAndUpdate(jobId, { status: 'done', documentId: document._id });
+    console.log("User ", userId, " completed strip job:", jobId, "-> document:", document._id, " filename:", filename, " uploadedAt:", uploadedAt, " processedAt:", document.processedAt);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('Error processing strip job:', err);
+    await StripJob.findByIdAndUpdate(jobId, { status: 'failed', error: message });
+  }
+}
 
 const router = Router();
 
@@ -109,23 +139,19 @@ const router = Router();
  *                 format: byte
  *                 description: Base64-encoded file data
  *     responses:
- *       201:
- *         description: Document uploaded successfully
+ *       202:
+ *         description: Strip job accepted
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 message:
- *                   type: string
- *                 documentId:
+ *                 jobId:
  *                   type: string
  *       400:
  *         description: Missing filename or data in request body
  *       401:
  *         description: Unauthorized - Invalid or missing token
- *       500:
- *         description: Server error while saving document
  */
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   const userId = req.userId;
@@ -134,28 +160,55 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     return res.status(400).json({ error: 'Missing filename or data' });
   }
 
-  let strippedData: Buffer;
-  try {
-    strippedData = await stripDocxMetadata(Buffer.from(data, 'base64'));
-  } catch (err) {
-    console.error('Error stripping metadata:', err);
-    return res.status(500).json({ error: 'Failed to strip metadata' });
-  }
+  const uploadedAt = new Date();
+  const job = await new StripJob({ userId }).save();
+  console.log("User ", userId, " created strip job:", job._id);
+  processStripJob(String(job._id), String(userId), filename, data, uploadedAt);
+  return res.status(202).json({ jobId: job._id });
+});
 
-  const document = new Document({
-    userId,
-    filename,
-    data: strippedData,
-    uploadedAt: new Date(),
-  });
-
-  try {
-    await document.save();
-    res.status(201).json({ message: 'Document uploaded successfully', documentId: document._id });
-  } catch (err) {
-    console.error('Error saving document:', err);
-    res.status(500).json({ error: 'Failed to save document' });
+/**
+ * @swagger
+ * /strip/{jobId}:
+ *   get:
+ *     summary: Poll a strip job
+ *     description: Returns the status of a metadata-strip job. When done, includes the documentId.
+ *     tags:
+ *       - Documents
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: jobId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Job status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [pending, done, failed]
+ *                 documentId:
+ *                   type: string
+ *                 error:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Job not found
+ */
+router.get('/strip/:jobId', authMiddleware, async (req: AuthRequest, res) => {
+  const job = await StripJob.findById(req.params['jobId']);
+  if (!job || String(job.userId) !== String(req.userId)) {
+    return res.status(404).json({ error: 'Job not found' });
   }
+  return res.json({ status: job.status, documentId: job.documentId ?? undefined, error: job.error ?? undefined });
 });
 
 export default router;

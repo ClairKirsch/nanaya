@@ -44,5 +44,5 @@
     "outDir": "dist",
     "esModuleInterop": true
   },
-  "exclude": ["node_modules", "scripts"]
+  "exclude": ["node_modules", "scripts", "vitest.config.ts"]
 }

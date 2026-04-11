@@ -1,10 +1,20 @@
 import { describe, it, expect, beforeAll } from 'vitest';
+import { execFileSync } from 'child_process';
 import { readFileSync } from 'fs';
 import JSZip from 'jszip';
 import { stripDocxMetadata } from '../routes/documents.js';
 import { ensureMetadataStripper } from '../container.js';
 
 const FIXTURE = new URL('../../test_files/metadata_showcase.docx', import.meta.url);
+
+const hasRunsc = (() => {
+  try {
+    execFileSync('runsc', ['--version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 // These values are present in the fixture's docProps/core.xml
 const KNOWN_AUTHOR = 'Jane Doe';
@@ -13,7 +23,7 @@ const KNOWN_TITLE = 'Metadata Showcase Document';
 const KNOWN_SUBJECT = 'OOXML Document Metadata';
 const KNOWN_KEYWORDS = 'metadata, docx, OOXML';
 
-describe('stripDocxMetadata (container smoke)', () => {
+describe.skipIf(!hasRunsc)('stripDocxMetadata (container smoke)', () => {
   let resultZip: JSZip;
 
   beforeAll(async () => {
