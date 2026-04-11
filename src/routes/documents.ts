@@ -2,10 +2,11 @@ import { spawn } from 'child_process';
 import { Router } from 'express';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { Schema, model } from 'mongoose';
+import { STRIPPER_IMAGE } from '../container.js';
 
-const STRIPPER_IMAGE = 'localhost/metadata-stripper:latest';
+const CONTAINER_RUNTIME = process.env['CONTAINER_RUNTIME'] ?? 'runsc';
 
-function stripDocxMetadata(docxBase64: Buffer): Promise<Buffer> {
+export function stripDocxMetadata(docxBase64: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const proc = spawn(
       'podman',
@@ -13,7 +14,9 @@ function stripDocxMetadata(docxBase64: Buffer): Promise<Buffer> {
         'run',
         '--rm',
         '-i',
-        '--runtime=runsc',
+        '--runtime=' + CONTAINER_RUNTIME,
+        // Never pull from a registry — only use locally built images
+        '--pull=never',
         // Drop every capability
         '--cap-drop=all',
         // Block setuid/setgid-based privilege escalation

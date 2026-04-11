@@ -11,10 +11,12 @@
     "source=devcontainer-node-modules,target=/workspaces/tohno-backend/node_modules,type=volume"
 
   ],
-  "capAdd": ["SYS_ADMIN", "NET_ADMIN", "SYS_PTRACE"],
+  "capAdd": ["SYS_ADMIN", "NET_ADMIN", "SYS_PTRACE", "AUDIT_WRITE"],
+  "runArgs": ["--cgroupns=host"],
+  "privileged": true,
   "forwardPorts": [3000],
   "containerEnv": { "PODMAN_USERNS": "keep-id" },
-  "postCreateCommand": "sudo chown -R vscode:vscode /workspaces/tohno-backend/node_modules && npm install",
+  "postCreateCommand": "sudo chown -R vscode:vscode /workspaces/tohno-backend/node_modules && npm install && podman build --network=host --isolation=chroot -t localhost/metadata-stripper:latest /workspaces/tohno-backend/docker/metadata-stripper",
   "postStartCommand": "sudo mongod --fork --logpath /tmp/mongod.log --dbpath /var/lib/mongodb",
   "customizations": {
     "vscode": {

@@ -26,8 +26,22 @@ RUN curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
     && apt-get install -y mongodb-org \
     && rm -rf /var/lib/apt/lists/*
 
-# Podman config for vscode user
+# Wrapper script so Podman passes --ignore-cgroups to runsc unconditionally.
+# containers.conf [engine.runtimes] is a path search list only — it cannot
+# pass extra flags — so a wrapper is the correct way to bake in runtime args.
+RUN printf '#!/bin/sh\nexec /usr/local/bin/runsc --ignore-cgroups "$@"\n' \
+    > /usr/local/bin/runsc-ignore-cgroups \
+    && chmod +x /usr/local/bin/runsc-ignore-cgroups
+
+# Podman config — install at both system and vscode-user level.
+# Rootless Podman prefers ~/.config/containers/ over /etc/containers/,
+# so we seed the user directory here; the path must exist before first run.
 COPY containers.conf /etc/containers/containers.conf
+COPY storage.conf /etc/containers/storage.conf
+RUN mkdir -p /home/vscode/.config/containers \
+    && cp /etc/containers/containers.conf /home/vscode/.config/containers/containers.conf \
+    && cp /etc/containers/storage.conf /home/vscode/.config/containers/storage.conf \
+    && chown -R vscode:vscode /home/vscode/.config
 
 # Fix git safe directory for vscode user
 RUN git config --global --add safe.directory /workspaces/tohno-backend
