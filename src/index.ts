@@ -3,13 +3,8 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import express from 'express';
 import mongoose from 'mongoose';
-import swaggerUi from 'swagger-ui-express';
-import { swaggerSpec } from './swagger.js';
-import usersRouter from './routes/users.js';
-import debugRouter from './routes/debug.js';
-import documentsRouter from './routes/documents.js';
+import app from './app.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -30,19 +25,8 @@ async function ensureMetadataStripper(): Promise<void> {
   }
 }
 
-const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/tohno';
-
-app.use(express.json());
-
-// Swagger UI at /api-docs
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
-// Routes
-app.use('/users', usersRouter);
-app.use('/debug', debugRouter);
-app.use('/documents', documentsRouter); // Serve documents from the "documents" folder
 
 // Connect to MongoDB, ensure container image, then start server
 Promise.all([mongoose.connect(MONGODB_URI), ensureMetadataStripper()])
