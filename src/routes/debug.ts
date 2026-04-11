@@ -1,7 +1,5 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { Schema, model } from 'mongoose';
-import jwt from 'jsonwebtoken';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
@@ -58,6 +56,5 @@ router.get('/', authMiddleware, (req: AuthRequest, res: Response) => {
     teacher: req.teacher,
   });
 });
-
 
 export default router;

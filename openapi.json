@@ -83,6 +83,74 @@
         }
       }
     },
+    "/": {
+      "post": {
+        "summary": "Upload a document",
+        "description": "Upload a new document associated with the authenticated user",
+        "tags": [
+          "Documents"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "filename",
+                  "data"
+                ],
+                "properties": {
+                  "filename": {
+                    "type": "string",
+                    "description": "Name of the document file"
+                  },
+                  "data": {
+                    "type": "string",
+                    "format": "byte",
+                    "description": "Base64-encoded file data"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Document uploaded successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "documentId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing filename or data in request body"
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing token"
+          },
+          "500": {
+            "description": "Server error while saving document"
+          }
+        }
+      }
+    },
     "/users": {
       "get": {
         "summary": "Get all users",
@@ -125,17 +193,12 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "id",
                   "name",
                   "teacher",
                   "email",
                   "password"
                 ],
                 "properties": {
-                  "id": {
-                    "type": "number",
-                    "example": 1
-                  },
                   "name": {
                     "type": "string",
                     "example": "Alice"
@@ -151,6 +214,10 @@
                   "password": {
                     "type": "string",
                     "example": "password123"
+                  },
+                  "screen_name": {
+                    "type": "string",
+                    "example": "alice123"
                   }
                 }
               }
@@ -173,6 +240,12 @@
                     },
                     "teacher": {
                       "type": "boolean"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "screen_name": {
+                      "type": "string"
                     }
                   }
                 }
@@ -180,7 +253,7 @@
             }
           },
           "400": {
-            "description": "Missing id, name, email, password, or teacher"
+            "description": "Missing name, email, password, teacher, or screen_name"
           },
           "500": {
             "description": "Failed to create user",

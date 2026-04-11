@@ -1,0 +1,32 @@
+{
+  "name": "tohno-backend",
+  "build": { "dockerfile": "Dockerfile" },
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "lts" },
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+  },
+  "mounts": [
+    "source=devcontainer-containers-cache,target=/var/lib/containers,type=volume"
+  ],
+  "capAdd": ["SYS_ADMIN", "NET_ADMIN", "SYS_PTRACE"],
+  "forwardPorts": [3000],
+  "containerEnv": { "PODMAN_USERNS": "keep-id" },
+  "postCreateCommand": "npm install",
+  "postStartCommand": "sudo mongod --fork --logpath /tmp/mongod.log --dbpath /var/lib/mongodb",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "eslint.validate": ["javascript", "typescript"],
+        "[typescript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode",
+          "editor.formatOnSave": true
+        }
+      }
+    }
+  }
+}

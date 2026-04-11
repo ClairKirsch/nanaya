@@ -1,16 +1,32 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { Schema, model } from 'mongoose';
+import { Schema, model, type InferSchemaType, type HydratedDocument } from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { authMiddleware, type AuthRequest, type JwtPayload } from '../middleware/auth.js';
 
 const userSchema = new Schema({
-  id: { type: Number, required: true },
   name: { type: String, required: true },
   email: { type: String, required: true },
   password: { type: String, required: true },
   teacher: { type: Boolean, required: true },
+  screen_name: { type: String, required: true },
 });
+
+type UserHydrated = HydratedDocument<InferSchemaType<typeof userSchema>>;
+
+interface UserPublic {
+  _id: string;
+  teacher: boolean;
+  screen_name: string;
+}
+
+function toPublicUser(user: UserHydrated): UserPublic {
+  return {
+    _id: user._id.toString(),
+    teacher: user.teacher,
+    screen_name: user.screen_name,
+  };
+}
 
 const User = model('User', userSchema);
 
@@ -42,9 +58,8 @@ const router = Router();
  */
 router.get('/', authMiddleware, (req: AuthRequest, res: Response) => {
   User.find()
-    .then(users => res.json(users))
-    .catch(err => res.status(500).json({ error: 'Failed to fetch users' }));
-
+    .then((users) => res.json(users.map(toPublicUser)))
+    .catch((err) => res.status(500).json({ error: 'Failed to fetch users' }));
 });
 
 /**
@@ -59,15 +74,11 @@ router.get('/', authMiddleware, (req: AuthRequest, res: Response) => {
  *           schema:
  *             type: object
  *             required:
- *               - id
  *               - name
  *               - teacher
  *               - email
  *               - password
  *             properties:
- *               id:
- *                 type: number
- *                 example: 1
  *               name:
  *                 type: string
  *                 example: Alice
@@ -80,6 +91,10 @@ router.get('/', authMiddleware, (req: AuthRequest, res: Response) => {
  *               password:
  *                 type: string
  *                 example: password123
+ *               screen_name:
+ *                 type: string
+ *                 example: alice123
+ *
  *
  *     responses:
  *       201:
@@ -95,8 +110,12 @@ router.get('/', authMiddleware, (req: AuthRequest, res: Response) => {
  *                   type: string
  *                 teacher:
  *                   type: boolean
+ *                 email:
+ *                   type: string
+ *                 screen_name:
+ *                   type: string
  *       400:
- *         description: Missing id, name, email, password, or teacher
+ *         description: Missing name, email, password, teacher, or screen_name
  *       500:
  *         description: Failed to create user
  *         content:
@@ -110,14 +129,29 @@ router.get('/', authMiddleware, (req: AuthRequest, res: Response) => {
  *
  */
 router.post('/', (req: Request, res: Response) => {
-  const { id, name, email, password, teacher } = req.body;
-  const newUser = new User({ id, name, email, password, teacher });
-  if (!id || !name || !email || !password || teacher === undefined) {
-    return res.status(400).json({ error: 'Missing id, name, email, password, or teacher' });
+  const { name, email, password, teacher, screen_name } = req.body;
+  console.log(
+    'Received request to create new user:',
+    { name, email, teacher, screen_name },
+    'at time',
+    new Date().toISOString()
+  );
+  const newUser = new User({ name, email, password, teacher, screen_name });
+  if (!name || !email || !password || teacher === undefined || !screen_name) {
+    return res
+      .status(400)
+      .json({ error: 'Missing name, email, password, teacher, or screen_name' });
   }
-  newUser.save()
-    .then(user => res.status(201).json(user))
-    .catch(err => res.status(500).json({ error: 'Failed to create user' }));
+  console.log(
+    'Creating new user:',
+    { name, email, teacher, screen_name },
+    'at time',
+    new Date().toISOString()
+  );
+  newUser
+    .save()
+    .then((user) => res.status(201).json(user))
+    .catch((err) => res.status(500).json({ error: 'Failed to create user' }));
 });
 
 /**
@@ -189,16 +223,25 @@ router.post('/login', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Missing email or password' });
   }
   User.findOne({ email, password })
-    .then(user => {
+    .then((user) => {
       if (!user) {
         return res.status(401).json({ error: 'Invalid email or password' });
       }
-      const payload: JwtPayload = { id: user.id.toString(), email: user.email, teacher: user.teacher };
+      const payload: JwtPayload = {
+        id: user._id.toString(),
+        email: user.email,
+        teacher: user.teacher,
+      };
       const token = jwt.sign(payload, process.env.JWT_SECRET as string, { expiresIn: '20d' });
+      console.log(
+        'Authenticated user:',
+        { id: payload.id, email: payload.email, teacher: payload.teacher },
+        'at time',
+        new Date().toISOString()
+      );
       res.json({ token });
     })
-    .catch(err => res.status(500).json({ error: 'Failed to login' }));
+    .catch((err) => res.status(500).json({ error: 'Failed to login' }));
 });
-
 
 export default router;
