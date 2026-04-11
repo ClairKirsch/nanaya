@@ -15,5 +15,5 @@ COPY strip.sh .
 RUN chmod +x strip.sh
 
 # The container reads a raw DOCX from stdin and writes a cleaned DOCX to stdout.
-#   docker run --rm -i metadata-stripper < input.docx > output.docx
+#   podman run --rm -i --runtime=runsc metadata-stripper < input.docx > output.docx
 ENTRYPOINT ["/app/strip.sh"]

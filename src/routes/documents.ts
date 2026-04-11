@@ -1,6 +1,36 @@
+import { spawn } from 'child_process';
 import { Router } from 'express';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { Schema, model } from 'mongoose';
+
+const STRIPPER_IMAGE = 'localhost/metadata-stripper:latest';
+
+function stripDocxMetadata(docxBase64: Buffer): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('podman', ['run', '--rm', '-i', '--runtime=runsc', STRIPPER_IMAGE], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    const chunks: Buffer[] = [];
+    const errChunks: Buffer[] = [];
+
+    proc.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
+    proc.stderr.on('data', (chunk: Buffer) => errChunks.push(chunk));
+
+    proc.on('error', reject);
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        const stderr = Buffer.concat(errChunks).toString('utf8');
+        return reject(new Error(`metadata-stripper exited with code ${code}: ${stderr}`));
+      }
+      resolve(Buffer.concat(chunks));
+    });
+
+    proc.stdin.write(docxBase64);
+    proc.stdin.end();
+  });
+}
 
 const documentSchema = new Schema({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -73,10 +103,18 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     return res.status(400).json({ error: 'Missing filename or data' });
   }
 
+  let strippedData: Buffer;
+  try {
+    strippedData = await stripDocxMetadata(Buffer.from(data, 'base64'));
+  } catch (err) {
+    console.error('Error stripping metadata:', err);
+    return res.status(500).json({ error: 'Failed to strip metadata' });
+  }
+
   const document = new Document({
     userId,
     filename,
-    data: Buffer.from(data, 'base64'),
+    data: strippedData,
     uploadedAt: new Date(),
   });
 
