@@ -1,38 +1,9 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { Schema, model, type InferSchemaType, type HydratedDocument } from 'mongoose';
 import jwt from 'jsonwebtoken';
-import { authMiddleware, type AuthRequest, type JwtPayload } from '../middleware/auth.js';
 import argon2 from 'argon2';
-
-// Matches the PHC string format for argon2id hashes
-const ARGON2ID_REGEX = /^\$argon2id\$/;
-
-const userSchema = new Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true },
-  password: { type: String, required: true },
-  teacher: { type: Boolean, required: true },
-  screen_name: { type: String, required: true },
-});
-
-type UserHydrated = HydratedDocument<InferSchemaType<typeof userSchema>>;
-
-interface UserPublic {
-  _id: string;
-  teacher: boolean;
-  screen_name: string;
-}
-
-function toPublicUser(user: UserHydrated): UserPublic {
-  return {
-    _id: user._id.toString(),
-    teacher: user.teacher,
-    screen_name: user.screen_name,
-  };
-}
-
-const User = model('User', userSchema);
+import { authMiddleware, type AuthRequest, type JwtPayload } from '../middleware/auth.js';
+import { User, toPublicUser } from '../models/User.js';
 
 const router = Router();
 
@@ -63,7 +34,7 @@ const router = Router();
 router.get('/', authMiddleware, (req: AuthRequest, res: Response) => {
   User.find()
     .then((users) => res.json(users.map(toPublicUser)))
-    .catch((err) => res.status(500).json({ error: 'Failed to fetch users' }));
+    .catch(() => res.status(500).json({ error: 'Failed to fetch users' }));
 });
 
 /**
@@ -145,20 +116,20 @@ router.post('/', (req: Request, res: Response) => {
       .status(400)
       .json({ error: 'Missing name, email, password, teacher, or screen_name' });
   }
-  if (!ARGON2ID_REGEX.test(password)) {
-    return res.status(400).json({ error: 'Password must be an argon2id hash' });
-  }
-  const newUser = new User({ name, email, password, teacher, screen_name });
-  console.log(
-    'Creating new user:',
-    { name, email, teacher, screen_name },
-    'at time',
-    new Date().toISOString()
-  );
-  newUser
-    .save()
+  argon2
+    .hash(password)
+    .then((hashedPassword) => {
+      const newUser = new User({ name, email, password: hashedPassword, teacher, screen_name });
+      console.log(
+        'Creating new user:',
+        { name, email, teacher, screen_name },
+        'at time',
+        new Date().toISOString()
+      );
+      return newUser.save();
+    })
     .then((user) => res.status(201).json(user))
-    .catch((err) => res.status(500).json({ error: 'Failed to create user' }));
+    .catch(() => res.status(500).json({ error: 'Failed to create user' }));
 });
 
 /**
@@ -252,7 +223,7 @@ router.post('/login', (req: Request, res: Response) => {
       );
       res.json({ token });
     })
-    .catch((err) => res.status(500).json({ error: 'Failed to login' }));
+    .catch(() => res.status(500).json({ error: 'Failed to login' }));
 });
 
 export default router;

@@ -1,8 +1,9 @@
 import { spawn } from 'child_process';
 import { Router } from 'express';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
-import { Schema, model } from 'mongoose';
 import { STRIPPER_IMAGE } from '../container.js';
+import { Document } from '../models/Document.js';
+import { StripJob } from '../models/StripJob.js';
 
 const CONTAINER_RUNTIME = process.env['CONTAINER_RUNTIME'] ?? 'runsc';
 
@@ -63,31 +64,6 @@ export function stripDocxMetadata(docxBase64: Buffer): Promise<Buffer> {
   });
 }
 
-const documentSchema = new Schema({
-  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  filename: String,
-  data: Buffer,
-  uploadedAt: Date,
-  processedAt: Date,
-});
-const Document = model('Document', documentSchema);
-
-const commentSchema = new Schema({
-  documentId: { type: Schema.Types.ObjectId, ref: 'Document', required: true },
-  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  text: { type: String, required: true },
-  createdAt: { type: Date, default: Date.now },
-});
-const Comment = model('Comment', commentSchema);
-
-const stripJobSchema = new Schema({
-  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  status: { type: String, enum: ['pending', 'done', 'failed'], default: 'pending' },
-  documentId: { type: Schema.Types.ObjectId, ref: 'Document', default: null },
-  error: { type: String, default: null },
-  createdAt: { type: Date, default: Date.now },
-});
-const StripJob = model('StripJob', stripJobSchema);
 
 async function processStripJob(
   jobId: string,
