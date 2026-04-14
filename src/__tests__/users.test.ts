@@ -6,10 +6,11 @@ import app from '../app.js';
 
 process.env['JWT_SECRET'] = 'test-secret';
 
-const TEST_USER = {
+const PLAINTEXT_PASSWORD = 'password123';
+
+const TEST_USER_BASE = {
   name: 'Alice',
   email: 'alice@example.com',
-  password: 'password123',
   teacher: false,
   screen_name: 'alice123',
 };
@@ -35,13 +36,15 @@ afterEach(async () => {
 
 describe('POST /users', () => {
   it('creates a new user and returns it', async () => {
-    const res = await request(app).post('/users').send(TEST_USER);
+    const res = await request(app)
+      .post('/users')
+      .send({ ...TEST_USER_BASE, password: PLAINTEXT_PASSWORD });
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({
-      name: TEST_USER.name,
-      email: TEST_USER.email,
-      teacher: TEST_USER.teacher,
-      screen_name: TEST_USER.screen_name,
+      name: TEST_USER_BASE.name,
+      email: TEST_USER_BASE.email,
+      teacher: TEST_USER_BASE.teacher,
+      screen_name: TEST_USER_BASE.screen_name,
     });
   });
 
@@ -53,11 +56,13 @@ describe('POST /users', () => {
 
 describe('POST /users/login', () => {
   it('returns a JWT token for valid credentials', async () => {
-    await request(app).post('/users').send(TEST_USER);
+    await request(app)
+      .post('/users')
+      .send({ ...TEST_USER_BASE, password: PLAINTEXT_PASSWORD });
 
     const res = await request(app)
       .post('/users/login')
-      .send({ email: TEST_USER.email, password: TEST_USER.password });
+      .send({ email: TEST_USER_BASE.email, password: PLAINTEXT_PASSWORD });
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('token');
@@ -65,11 +70,13 @@ describe('POST /users/login', () => {
   });
 
   it('returns 401 for wrong password', async () => {
-    await request(app).post('/users').send(TEST_USER);
+    await request(app)
+      .post('/users')
+      .send({ ...TEST_USER_BASE, password: PLAINTEXT_PASSWORD });
 
     const res = await request(app)
       .post('/users/login')
-      .send({ email: TEST_USER.email, password: 'wrongpassword' });
+      .send({ email: TEST_USER_BASE.email, password: 'wrongpassword' });
 
     expect(res.status).toBe(401);
   });
@@ -82,10 +89,12 @@ describe('POST /users/login', () => {
 
 describe('GET /users', () => {
   it('returns the user list when authenticated', async () => {
-    await request(app).post('/users').send(TEST_USER);
+    await request(app)
+      .post('/users')
+      .send({ ...TEST_USER_BASE, password: PLAINTEXT_PASSWORD });
     const loginRes = await request(app)
       .post('/users/login')
-      .send({ email: TEST_USER.email, password: TEST_USER.password });
+      .send({ email: TEST_USER_BASE.email, password: PLAINTEXT_PASSWORD });
     const token: string = loginRes.body.token;
 
     const res = await request(app).get('/users').set('Authorization', `Bearer ${token}`);
@@ -93,7 +102,7 @@ describe('GET /users', () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body).toHaveLength(1);
-    expect(res.body[0]).toMatchObject({ screen_name: TEST_USER.screen_name });
+    expect(res.body[0]).toMatchObject({ screen_name: TEST_USER_BASE.screen_name });
   });
 
   it('returns 401 without a token', async () => {

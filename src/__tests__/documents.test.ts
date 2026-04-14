@@ -38,10 +38,12 @@ function makeMockProc(output: Buffer, exitCode: number, delayMs = 0): ChildProce
   return Object.assign(emitter, { stdout, stderr, stdin }) as unknown as ChildProcess;
 }
 
-const TEST_USER = {
+const ALICE_PLAINTEXT = 'password123';
+const BOB_PLAINTEXT = 'password456';
+
+const ALICE_BASE = {
   name: 'Alice',
   email: 'alice@example.com',
-  password: 'password123',
   teacher: false,
   screen_name: 'alice123',
 };
@@ -63,10 +65,12 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await request(app).post('/users').send(TEST_USER);
+  await request(app)
+    .post('/users')
+    .send({ ...ALICE_BASE, password: ALICE_PLAINTEXT });
   const loginRes = await request(app)
     .post('/users/login')
-    .send({ email: TEST_USER.email, password: TEST_USER.password });
+    .send({ email: ALICE_BASE.email, password: ALICE_PLAINTEXT });
   token = loginRes.body.token;
 });
 
@@ -223,13 +227,13 @@ describe('GET /documents/strip/:jobId', () => {
     await request(app).post('/users').send({
       name: 'Bob',
       email: 'bob@example.com',
-      password: 'password456',
+      password: BOB_PLAINTEXT,
       teacher: false,
       screen_name: 'bob456',
     });
     const bobLogin = await request(app)
       .post('/users/login')
-      .send({ email: 'bob@example.com', password: 'password456' });
+      .send({ email: 'bob@example.com', password: BOB_PLAINTEXT });
     const bobToken: string = bobLogin.body.token;
 
     const res = await request(app)
