@@ -64,7 +64,6 @@ export function stripDocxMetadata(docxBase64: Buffer): Promise<Buffer> {
   });
 }
 
-
 async function processStripJob(
   jobId: string,
   userId: string,
