@@ -1,6 +1,5 @@
 #!/bin/sh
 . "$(dirname "$0")/_/husky.sh"
 
-npm run lint || exit 1
-npm run format --check || exit 1
+npx lint-staged || exit 1
 npm run generate-docs || exit 1
