@@ -8,6 +8,7 @@ import { PassThrough } from 'stream';
 import type { ChildProcess } from 'child_process';
 import app from '../app.js';
 import { Document } from '../models/Document.js';
+import { StripJob } from '../models/StripJob.js';
 import { User } from '../models/User.js';
 
 process.env['JWT_SECRET'] = 'test-secret';
@@ -111,6 +112,26 @@ describe('POST /documents', () => {
       .post('/documents')
       .send({ filename: 'test.docx', data: DUMMY_DOCX });
     expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when a teacher tries to upload', async () => {
+    await request(app).post('/users').send({
+      name: 'Teacher',
+      email: 'teacher@example.com',
+      password: 'teacherpass',
+      teacher: true,
+      screen_name: 'prof1',
+    });
+    const loginRes = await request(app)
+      .post('/users/login')
+      .send({ email: 'teacher@example.com', password: 'teacherpass' });
+    const teacherToken: string = loginRes.body.token;
+
+    const res = await request(app)
+      .post('/documents')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ filename: 'test.docx', data: DUMMY_DOCX });
+    expect(res.status).toBe(403);
   });
 
   it('returns 400 when filename is missing', async () => {
@@ -316,7 +337,7 @@ describe('POST /documents/search', () => {
     expect(res.body.results[2].similarity).toBeCloseTo(0.0);
   });
 
-  it("does not return another user's documents", async () => {
+  it('returns documents from all users', async () => {
     const alice = await User.findOne({ email: ALICE_BASE.email });
     await request(app).post('/users').send({
       name: 'Bob',
@@ -341,6 +362,431 @@ describe('POST /documents/search', () => {
 
     expect(res.status).toBe(200);
     const filenames = res.body.results.map((r: { filename: string }) => r.filename);
-    expect(filenames).toEqual(['alice.docx']);
+    expect(filenames).toContain('alice.docx');
+    expect(filenames).toContain('bob.docx');
+  });
+});
+
+describe('GET /documents/random', () => {
+  it('returns 401 without a token', async () => {
+    const res = await request(app).get('/documents/random');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 404 when there are no documents', async () => {
+    const res = await request(app).get('/documents/random').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns a document with the expected fields', async () => {
+    const alice = await User.findOne({ email: ALICE_BASE.email });
+    await Document.create({
+      userId: alice!._id,
+      filename: 'sample.docx',
+      vector: [1, 0],
+      uploadedAt: new Date(),
+      processedAt: new Date(),
+    });
+
+    const res = await request(app).get('/documents/random').set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('documentId');
+    expect(Object.keys(res.body)).toEqual(['documentId']);
+  });
+
+  it('can return documents belonging to any user', async () => {
+    await request(app).post('/users').send({
+      name: 'Bob',
+      email: 'bob@example.com',
+      password: BOB_PLAINTEXT,
+      teacher: false,
+      screen_name: 'bob456',
+    });
+    const bob = await User.findOne({ email: 'bob@example.com' });
+    await Document.create({
+      userId: bob!._id,
+      filename: 'bobs.docx',
+      vector: [0, 1],
+      uploadedAt: new Date(),
+      processedAt: new Date(),
+    });
+
+    const res = await request(app).get('/documents/random').set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(typeof res.body.documentId).toBe('string');
+  });
+});
+
+describe('GET /documents', () => {
+  it('returns 401 without a token', async () => {
+    const res = await request(app).get('/documents');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns an empty array when there are no documents', async () => {
+    const res = await request(app).get('/documents').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it('returns documents from all users', async () => {
+    const alice = await User.findOne({ email: ALICE_BASE.email });
+    await request(app).post('/users').send({
+      name: 'Bob',
+      email: 'bob@example.com',
+      password: BOB_PLAINTEXT,
+      teacher: false,
+      screen_name: 'bob456',
+    });
+    const bob = await User.findOne({ email: 'bob@example.com' });
+    await Document.insertMany([
+      {
+        userId: alice!._id,
+        filename: 'alice.docx',
+        vector: [1, 0],
+        uploadedAt: new Date(),
+        processedAt: new Date(),
+      },
+      {
+        userId: bob!._id,
+        filename: 'bob.docx',
+        vector: [0, 1],
+        uploadedAt: new Date(),
+        processedAt: new Date(),
+      },
+    ]);
+
+    const res = await request(app).get('/documents').set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    const filenames = res.body.map((d: { filename: string }) => d.filename);
+    expect(filenames).toContain('alice.docx');
+    expect(filenames).toContain('bob.docx');
+  });
+
+  it('returns documents with expected metadata fields and no data or vector', async () => {
+    const alice = await User.findOne({ email: ALICE_BASE.email });
+    await Document.create({
+      userId: alice!._id,
+      filename: 'test.docx',
+      data: Buffer.from('secret'),
+      vector: [1, 0],
+      uploadedAt: new Date(),
+      processedAt: new Date(),
+    });
+
+    const res = await request(app).get('/documents').set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0]).toHaveProperty('documentId');
+    expect(res.body[0]).toHaveProperty('filename');
+    expect(res.body[0]).toHaveProperty('uploadedAt');
+    expect(res.body[0]).toHaveProperty('processedAt');
+    expect(res.body[0]).not.toHaveProperty('data');
+    expect(res.body[0]).not.toHaveProperty('vector');
+  });
+});
+
+describe('GET /documents/my_documents', () => {
+  it('returns 401 without a token', async () => {
+    const res = await request(app).get('/documents/my_documents');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns an empty array when the user has no documents', async () => {
+    const res = await request(app)
+      .get('/documents/my_documents')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it("returns only the authenticated user's own documents", async () => {
+    const alice = await User.findOne({ email: ALICE_BASE.email });
+    await request(app).post('/users').send({
+      name: 'Bob',
+      email: 'bob@example.com',
+      password: BOB_PLAINTEXT,
+      teacher: false,
+      screen_name: 'bob456',
+    });
+    const bob = await User.findOne({ email: 'bob@example.com' });
+    await Document.insertMany([
+      {
+        userId: alice!._id,
+        filename: 'alice.docx',
+        vector: [1, 0],
+        uploadedAt: new Date(),
+        processedAt: new Date(),
+      },
+      {
+        userId: bob!._id,
+        filename: 'bob.docx',
+        vector: [0, 1],
+        uploadedAt: new Date(),
+        processedAt: new Date(),
+      },
+    ]);
+
+    const res = await request(app)
+      .get('/documents/my_documents')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].filename).toBe('alice.docx');
+  });
+});
+
+describe('GET /documents/by_user/:userId', () => {
+  it('returns 401 without a token', async () => {
+    const alice = await User.findOne({ email: ALICE_BASE.email });
+    const res = await request(app).get(`/documents/by_user/${alice!._id}`);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns an empty array for a user with no documents', async () => {
+    const alice = await User.findOne({ email: ALICE_BASE.email });
+    const res = await request(app)
+      .get(`/documents/by_user/${alice!._id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it("returns only the specified user's documents", async () => {
+    const alice = await User.findOne({ email: ALICE_BASE.email });
+    await request(app).post('/users').send({
+      name: 'Bob',
+      email: 'bob@example.com',
+      password: BOB_PLAINTEXT,
+      teacher: false,
+      screen_name: 'bob456',
+    });
+    const bob = await User.findOne({ email: 'bob@example.com' });
+    await Document.insertMany([
+      {
+        userId: alice!._id,
+        filename: 'alice.docx',
+        vector: [1, 0],
+        uploadedAt: new Date(),
+        processedAt: new Date(),
+      },
+      {
+        userId: bob!._id,
+        filename: 'bob.docx',
+        vector: [0, 1],
+        uploadedAt: new Date(),
+        processedAt: new Date(),
+      },
+    ]);
+
+    const res = await request(app)
+      .get(`/documents/by_user/${bob!._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].filename).toBe('bob.docx');
+  });
+});
+
+describe('GET /documents/:documentId', () => {
+  it('returns 401 without a token', async () => {
+    const res = await request(app).get('/documents/000000000000000000000000');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 404 for a non-existent document', async () => {
+    const res = await request(app)
+      .get('/documents/000000000000000000000000')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns document metadata with expected fields', async () => {
+    const alice = await User.findOne({ email: ALICE_BASE.email });
+    const doc = await Document.create({
+      userId: alice!._id,
+      filename: 'meta.docx',
+      data: Buffer.from('x'),
+      vector: [1, 0],
+      uploadedAt: new Date(),
+      processedAt: new Date(),
+    });
+
+    const res = await request(app)
+      .get(`/documents/${doc._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      documentId: doc._id.toString(),
+      filename: 'meta.docx',
+    });
+    expect(res.body).toHaveProperty('uploadedAt');
+    expect(res.body).toHaveProperty('processedAt');
+    expect(res.body).not.toHaveProperty('data');
+    expect(res.body).not.toHaveProperty('vector');
+  });
+
+  it("returns another user's document (social site — no ownership check)", async () => {
+    await request(app).post('/users').send({
+      name: 'Bob',
+      email: 'bob@example.com',
+      password: BOB_PLAINTEXT,
+      teacher: false,
+      screen_name: 'bob456',
+    });
+    const bob = await User.findOne({ email: 'bob@example.com' });
+    const doc = await Document.create({
+      userId: bob!._id,
+      filename: 'bobs.docx',
+      vector: [0, 1],
+      uploadedAt: new Date(),
+      processedAt: new Date(),
+    });
+
+    const res = await request(app)
+      .get(`/documents/${doc._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.filename).toBe('bobs.docx');
+  });
+
+  it('returns 425 when a strip job is still pending for the document', async () => {
+    const alice = await User.findOne({ email: ALICE_BASE.email });
+    const doc = await Document.create({
+      userId: alice!._id,
+      filename: 'processing.docx',
+      vector: [],
+      uploadedAt: new Date(),
+    });
+    await StripJob.create({ userId: alice!._id, documentId: doc._id, status: 'pending' });
+
+    const res = await request(app)
+      .get(`/documents/${doc._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(425);
+  });
+});
+
+describe('GET /documents/:documentId/download', () => {
+  it('returns 401 without a token', async () => {
+    const res = await request(app).get('/documents/000000000000000000000000/download');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 404 for a non-existent document', async () => {
+    const res = await request(app)
+      .get('/documents/000000000000000000000000/download')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns the file with the correct content-type and filename', async () => {
+    const alice = await User.findOne({ email: ALICE_BASE.email });
+    const fileData = Buffer.from('PK\x03\x04fake docx bytes');
+    const doc = await Document.create({
+      userId: alice!._id,
+      filename: 'download-me.docx',
+      data: fileData,
+      vector: [1, 0],
+      uploadedAt: new Date(),
+      processedAt: new Date(),
+    });
+
+    const res = await request(app)
+      .get(`/documents/${doc._id}/download`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/wordprocessingml/);
+    expect(res.headers['content-disposition']).toContain('download-me.docx');
+    expect(Number(res.headers['content-length'])).toBe(fileData.length);
+  });
+
+  it("allows downloading another user's document (social site — no ownership check)", async () => {
+    await request(app).post('/users').send({
+      name: 'Bob',
+      email: 'bob@example.com',
+      password: BOB_PLAINTEXT,
+      teacher: false,
+      screen_name: 'bob456',
+    });
+    const bob = await User.findOne({ email: 'bob@example.com' });
+    const doc = await Document.create({
+      userId: bob!._id,
+      filename: 'bobs.docx',
+      data: Buffer.from('data'),
+      vector: [0, 1],
+      uploadedAt: new Date(),
+      processedAt: new Date(),
+    });
+
+    const res = await request(app)
+      .get(`/documents/${doc._id}/download`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('DELETE /documents/:documentId', () => {
+  it('returns 401 without a token', async () => {
+    const res = await request(app).delete('/documents/000000000000000000000000');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 404 for a non-existent document', async () => {
+    const res = await request(app)
+      .delete('/documents/000000000000000000000000')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 403 when a non-owner tries to delete', async () => {
+    await request(app).post('/users').send({
+      name: 'Bob',
+      email: 'bob@example.com',
+      password: BOB_PLAINTEXT,
+      teacher: false,
+      screen_name: 'bob456',
+    });
+    const bob = await User.findOne({ email: 'bob@example.com' });
+    const doc = await Document.create({
+      userId: bob!._id,
+      filename: 'bobs.docx',
+      vector: [0, 1],
+      uploadedAt: new Date(),
+    });
+
+    const res = await request(app)
+      .delete(`/documents/${doc._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 204 and removes the document when the owner deletes it', async () => {
+    const alice = await User.findOne({ email: ALICE_BASE.email });
+    const doc = await Document.create({
+      userId: alice!._id,
+      filename: 'mine.docx',
+      vector: [1, 0],
+      uploadedAt: new Date(),
+    });
+
+    const deleteRes = await request(app)
+      .delete(`/documents/${doc._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(deleteRes.status).toBe(204);
+    expect(await Document.findById(doc._id)).toBeNull();
   });
 });

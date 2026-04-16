@@ -185,8 +185,13 @@ const router = Router();
  *         description: Missing filename or data in request body
  *       401:
  *         description: Unauthorized - Invalid or missing token
+ *       403:
+ *         description: Forbidden - teachers cannot upload documents
  */
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
+  if (req.teacher) {
+    return res.status(403).json({ error: 'Teachers cannot upload documents' });
+  }
   const userId = req.userId;
   const { filename, data } = req.body;
   if (!filename || !data) {
@@ -253,7 +258,7 @@ router.get('/strip/:jobId', authMiddleware, async (req: AuthRequest, res) => {
  * /search:
  *   post:
  *     summary: Semantic search over documents
- *     description: Embeds the query string and returns the user's documents ranked by cosine similarity.
+ *     description: Embeds the query string and returns documents ranked by cosine similarity.
  *     tags:
  *       - Documents
  *     security:
@@ -307,14 +312,15 @@ router.post('/search', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const queryVector = await embedText(query);
     const documents = await Document.find(
-      { userId: req.userId },
-      { vector: 1, filename: 1 },
+      {},
+      { vector: 1, filename: 1, userId: 1 },
       { limit: 100 }
-    );
+    ).populate('userId', 'screen_name');
     const results = documents
       .map((doc) => ({
         documentId: doc._id,
         filename: doc.filename,
+        author: doc.userId,
         similarity: cosineSimilarity(queryVector, doc.vector),
       }))
       .sort((a, b) => b.similarity - a.similarity);
@@ -323,6 +329,325 @@ router.post('/search', authMiddleware, async (req: AuthRequest, res) => {
     console.error('Error during search:', err);
     return res.status(500).json({ error: 'Search failed' });
   }
+});
+
+/**
+ * @swagger
+ * /random:
+ *   get:
+ *     summary: Get a random document
+ *     description: Returns metadata for a randomly selected document from the entire database.
+ *     tags:
+ *       - Documents
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: The ID of a randomly selected document
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 documentId:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: No documents found
+ */
+router.get('/random', authMiddleware, async (_req: AuthRequest, res) => {
+  const randomDoc = await Document.aggregate([{ $sample: { size: 1 } }]);
+  if (randomDoc.length === 0) {
+    return res.status(404).json({ error: 'No documents found' });
+  }
+  return res.json({ documentId: randomDoc[0]._id });
+});
+
+/**
+ * @swagger
+ * /:
+ *   get:
+ *     summary: List all documents
+ *     description: Returns metadata for all documents on the platform.
+ *     tags:
+ *       - Documents
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of all documents
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   documentId:
+ *                     type: string
+ *                   filename:
+ *                     type: string
+ *                   uploadedAt:
+ *                     type: string
+ *                     format: date-time
+ *                   processedAt:
+ *                     type: string
+ *                     format: date-time
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ */
+router.get('/', authMiddleware, async (_req: AuthRequest, res) => {
+  const documents = await Document.find({}, { data: 0, vector: 0 });
+  return res.json(
+    documents.map((doc) => ({
+      documentId: doc._id,
+      filename: doc.filename,
+      uploadedAt: doc.uploadedAt,
+      processedAt: doc.processedAt,
+    }))
+  );
+});
+
+/**
+ * @swagger
+ * /my_documents:
+ *   get:
+ *     summary: List your own documents
+ *     description: Returns metadata for all documents uploaded by the authenticated user.
+ *     tags:
+ *       - Documents
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of your documents
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   documentId:
+ *                     type: string
+ *                   filename:
+ *                     type: string
+ *                   uploadedAt:
+ *                     type: string
+ *                     format: date-time
+ *                   processedAt:
+ *                     type: string
+ *                     format: date-time
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ */
+router.get('/my_documents', authMiddleware, async (req: AuthRequest, res) => {
+  const documents = await Document.find({ userId: req.userId }, { data: 0, vector: 0 });
+  return res.json(
+    documents.map((doc) => ({
+      documentId: doc._id,
+      filename: doc.filename,
+      uploadedAt: doc.uploadedAt,
+      processedAt: doc.processedAt,
+    }))
+  );
+});
+
+/**
+ * @swagger
+ * /by_user/{userId}:
+ *   get:
+ *     summary: List documents by user
+ *     description: Returns metadata for all documents uploaded by a specific user.
+ *     tags:
+ *       - Documents
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the user whose documents to retrieve
+ *     responses:
+ *       200:
+ *         description: List of documents by the specified user
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   documentId:
+ *                     type: string
+ *                   filename:
+ *                     type: string
+ *                   uploadedAt:
+ *                     type: string
+ *                     format: date-time
+ *                   processedAt:
+ *                     type: string
+ *                     format: date-time
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ */
+router.get('/by_user/:userId', authMiddleware, async (req: AuthRequest, res) => {
+  const documents = await Document.find({ userId: req.params['userId'] }, { data: 0, vector: 0 });
+  return res.json(
+    documents.map((doc) => ({
+      documentId: doc._id,
+      filename: doc.filename,
+      uploadedAt: doc.uploadedAt,
+      processedAt: doc.processedAt,
+    }))
+  );
+});
+
+/**
+ * @swagger
+ * /{documentId}:
+ *   get:
+ *     summary: Get a document by ID
+ *     description: Returns metadata for a document owned by the authenticated user.
+ *     tags:
+ *       - Documents
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the document to retrieve
+ *     responses:
+ *       200:
+ *         description: Document metadata
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 documentId:
+ *                   type: string
+ *                 filename:
+ *                   type: string
+ *                 uploadedAt:
+ *                   type: string
+ *                   format: date-time
+ *                 processedAt:
+ *                   type: string
+ *                   format: date-time
+ *       425:
+ *         description: Too Early - Document is currently being stripped or embedded
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Document not found
+ */
+router.get('/:documentId', authMiddleware, async (req: AuthRequest, res) => {
+  const pendingJob = await StripJob.findOne({
+    documentId: req.params['documentId'],
+    status: 'pending',
+  });
+  if (pendingJob) {
+    return res.status(425).json({ error: 'Document is still being processed' });
+  }
+  const document = await Document.findById(req.params['documentId']);
+  if (!document) {
+    return res.status(404).json({ error: 'Document not found' });
+  }
+  return res.json({
+    documentId: document._id,
+    filename: document.filename,
+    uploadedAt: document.uploadedAt,
+    processedAt: document.processedAt,
+  });
+});
+
+/**
+ * @swagger
+ * /{documentId}/download:
+ *   get:
+ *     summary: Download a document
+ *     description: Returns the stripped DOCX file for any document.
+ *     tags:
+ *       - Documents
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the document to download
+ *     responses:
+ *       200:
+ *         description: The DOCX file
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Document not found
+ */
+router.get('/:documentId/download', authMiddleware, async (req: AuthRequest, res) => {
+  const document = await Document.findById(req.params['documentId']);
+  if (!document) {
+    return res.status(404).json({ error: 'Document not found' });
+  }
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  );
+  res.setHeader('Content-Disposition', `attachment; filename="${document.filename}"`);
+  return res.send(document.data);
+});
+
+/**
+ * @swagger
+ * /{documentId}:
+ *   delete:
+ *     summary: Delete a document
+ *     description: Permanently deletes a document. Only the owner can delete their own documents.
+ *     tags:
+ *       - Documents
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the document to delete
+ *     responses:
+ *       204:
+ *         description: Document deleted successfully
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       403:
+ *         description: Forbidden - Document belongs to another user
+ *       404:
+ *         description: Document not found
+ */
+router.delete('/:documentId', authMiddleware, async (req: AuthRequest, res) => {
+  const document = await Document.findById(req.params['documentId']);
+  if (!document) {
+    return res.status(404).json({ error: 'Document not found' });
+  }
+  if (String(document.userId) !== String(req.userId)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  await Document.findByIdAndDelete(req.params['documentId']);
+  return res.status(204).send();
 });
 
 export default router;

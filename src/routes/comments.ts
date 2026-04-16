@@ -41,8 +41,15 @@ const router = Router();
  *                     type: string
  *                     description: Document ID
  *                   userId:
- *                     type: string
- *                     description: User ID of the comment author
+ *                     type: object
+ *                     description: The comment author
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       screen_name:
+ *                         type: string
+ *                       teacher:
+ *                         type: boolean
  *                   text:
  *                     type: string
  *                     description: Comment text content
@@ -66,7 +73,10 @@ const router = Router();
 router.get('/:documentId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { documentId } = req.params;
-    const comments = await Comment.find({ documentId }).sort({ createdAt: -1 }).exec();
+    const comments = await Comment.find({ documentId })
+      .populate('userId', 'screen_name teacher')
+      .sort({ createdAt: -1 })
+      .exec();
     res.json(comments);
   } catch {
     res.status(500).json({ error: 'Failed to fetch comments' });

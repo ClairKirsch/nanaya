@@ -57,8 +57,19 @@
                         "description": "Document ID"
                       },
                       "userId": {
-                        "type": "string",
-                        "description": "User ID of the comment author"
+                        "type": "object",
+                        "description": "The comment author",
+                        "properties": {
+                          "_id": {
+                            "type": "string"
+                          },
+                          "screen_name": {
+                            "type": "string"
+                          },
+                          "teacher": {
+                            "type": "boolean"
+                          }
+                        }
                       },
                       "text": {
                         "type": "string",
@@ -436,6 +447,55 @@
           },
           "401": {
             "description": "Unauthorized - Invalid or missing token"
+          },
+          "403": {
+            "description": "Forbidden - teachers cannot upload documents"
+          }
+        }
+      },
+      "get": {
+        "summary": "List all documents",
+        "description": "Returns metadata for all documents on the platform.",
+        "tags": [
+          "Documents"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of all documents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "documentId": {
+                        "type": "string"
+                      },
+                      "filename": {
+                        "type": "string"
+                      },
+                      "uploadedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "processedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing token"
           }
         }
       }
@@ -501,7 +561,7 @@
     "/search": {
       "post": {
         "summary": "Semantic search over documents",
-        "description": "Embeds the query string and returns the user's documents ranked by cosine similarity.",
+        "description": "Embeds the query string and returns documents ranked by cosine similarity.",
         "tags": [
           "Documents"
         ],
@@ -570,6 +630,293 @@
           },
           "500": {
             "description": "Embedding or search failed"
+          }
+        }
+      }
+    },
+    "/random": {
+      "get": {
+        "summary": "Get a random document",
+        "description": "Returns metadata for a randomly selected document from the entire database.",
+        "tags": [
+          "Documents"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The ID of a randomly selected document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "documentId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing token"
+          },
+          "404": {
+            "description": "No documents found"
+          }
+        }
+      }
+    },
+    "/my_documents": {
+      "get": {
+        "summary": "List your own documents",
+        "description": "Returns metadata for all documents uploaded by the authenticated user.",
+        "tags": [
+          "Documents"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of your documents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "documentId": {
+                        "type": "string"
+                      },
+                      "filename": {
+                        "type": "string"
+                      },
+                      "uploadedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "processedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing token"
+          }
+        }
+      }
+    },
+    "/by_user/{userId}": {
+      "get": {
+        "summary": "List documents by user",
+        "description": "Returns metadata for all documents uploaded by a specific user.",
+        "tags": [
+          "Documents"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The ID of the user whose documents to retrieve"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of documents by the specified user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "documentId": {
+                        "type": "string"
+                      },
+                      "filename": {
+                        "type": "string"
+                      },
+                      "uploadedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "processedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing token"
+          }
+        }
+      }
+    },
+    "/{documentId}": {
+      "get": {
+        "summary": "Get a document by ID",
+        "description": "Returns metadata for a document owned by the authenticated user.",
+        "tags": [
+          "Documents"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "documentId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The ID of the document to retrieve"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "documentId": {
+                      "type": "string"
+                    },
+                    "filename": {
+                      "type": "string"
+                    },
+                    "uploadedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "processedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing token"
+          },
+          "404": {
+            "description": "Document not found"
+          },
+          "425": {
+            "description": "Too Early - Document is currently being stripped or embedded"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a document",
+        "description": "Permanently deletes a document. Only the owner can delete their own documents.",
+        "tags": [
+          "Documents"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "documentId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The ID of the document to delete"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Document deleted successfully"
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing token"
+          },
+          "403": {
+            "description": "Forbidden - Document belongs to another user"
+          },
+          "404": {
+            "description": "Document not found"
+          }
+        }
+      }
+    },
+    "/{documentId}/download": {
+      "get": {
+        "summary": "Download a document",
+        "description": "Returns the stripped DOCX file for any document.",
+        "tags": [
+          "Documents"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "documentId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The ID of the document to download"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The DOCX file",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing token"
+          },
+          "404": {
+            "description": "Document not found"
           }
         }
       }

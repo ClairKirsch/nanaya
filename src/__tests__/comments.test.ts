@@ -224,7 +224,11 @@ describe('GET /comments/:documentId', () => {
     expect(res.body[0]).toMatchObject({
       _id: expect.any(String),
       documentId,
-      userId: expect.any(String),
+      userId: {
+        _id: expect.any(String),
+        screen_name: expect.any(String),
+        teacher: expect.any(Boolean),
+      },
       text: 'Test comment',
       createdAt: expect.any(String),
     });
