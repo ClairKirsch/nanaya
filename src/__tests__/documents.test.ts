@@ -7,13 +7,31 @@ import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 import type { ChildProcess } from 'child_process';
 import app from '../app.js';
+import { Document } from '../models/Document.js';
+import { User } from '../models/User.js';
 
 process.env['JWT_SECRET'] = 'test-secret';
+
+const mockEmbedContent = vi.hoisted(() => vi.fn());
 
 vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('child_process')>();
   return { ...actual, spawn: vi.fn() };
 });
+
+vi.mock('@google/generative-ai', () => ({
+  GoogleGenerativeAI: vi.fn().mockImplementation(function () {
+    return {
+      getGenerativeModel: vi.fn().mockResolvedValue({
+        embedContent: mockEmbedContent,
+      }),
+    };
+  }),
+}));
+
+vi.mock('mammoth', () => ({
+  default: { extractRawText: vi.fn().mockResolvedValue({ value: 'dummy text' }) },
+}));
 
 const { spawn } = await import('child_process');
 const spawnMock = vi.mocked(spawn);
@@ -74,12 +92,17 @@ beforeEach(async () => {
   token = loginRes.body.token;
 });
 
+beforeEach(() => {
+  mockEmbedContent.mockResolvedValue({ embedding: { values: [0.1, 0.2, 0.3] } });
+});
+
 afterEach(async () => {
   const collections = mongoose.connection.collections;
   for (const key in collections) {
     await collections[key]?.deleteMany({});
   }
   spawnMock.mockReset();
+  mockEmbedContent.mockReset();
 });
 
 describe('POST /documents', () => {
@@ -241,5 +264,83 @@ describe('GET /documents/strip/:jobId', () => {
       .set('Authorization', `Bearer ${bobToken}`);
 
     expect(res.status).toBe(404);
+  });
+});
+
+describe('POST /documents/search', () => {
+  it('returns 401 without a token', async () => {
+    const res = await request(app).post('/documents/search').send({ query: 'hello' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 400 when query is missing', async () => {
+    const res = await request(app)
+      .post('/documents/search')
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('returns empty results when the user has no documents', async () => {
+    mockEmbedContent.mockResolvedValue({ embedding: { values: [1, 0] } });
+
+    const res = await request(app)
+      .post('/documents/search')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ query: 'anything' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.results).toEqual([]);
+  });
+
+  it('returns results sorted by cosine similarity descending', async () => {
+    const alice = await User.findOne({ email: ALICE_BASE.email });
+    await Document.insertMany([
+      { userId: alice!._id, filename: 'a.docx', vector: [1, 0], uploadedAt: new Date() },
+      { userId: alice!._id, filename: 'b.docx', vector: [0, 1], uploadedAt: new Date() },
+      { userId: alice!._id, filename: 'c.docx', vector: [1, 1], uploadedAt: new Date() },
+    ]);
+
+    // Query vector [1, 0]: similarity to a=1.0, c≈0.707, b=0.0
+    mockEmbedContent.mockResolvedValue({ embedding: { values: [1, 0] } });
+
+    const res = await request(app)
+      .post('/documents/search')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ query: 'find a' });
+
+    expect(res.status).toBe(200);
+    const filenames = res.body.results.map((r: { filename: string }) => r.filename);
+    expect(filenames).toEqual(['a.docx', 'c.docx', 'b.docx']);
+    expect(res.body.results[0].similarity).toBeCloseTo(1.0);
+    expect(res.body.results[2].similarity).toBeCloseTo(0.0);
+  });
+
+  it("does not return another user's documents", async () => {
+    const alice = await User.findOne({ email: ALICE_BASE.email });
+    await request(app).post('/users').send({
+      name: 'Bob',
+      email: 'bob@example.com',
+      password: BOB_PLAINTEXT,
+      teacher: false,
+      screen_name: 'bob456',
+    });
+    const bob = await User.findOne({ email: 'bob@example.com' });
+
+    await Document.insertMany([
+      { userId: alice!._id, filename: 'alice.docx', vector: [1, 0], uploadedAt: new Date() },
+      { userId: bob!._id, filename: 'bob.docx', vector: [1, 0], uploadedAt: new Date() },
+    ]);
+
+    mockEmbedContent.mockResolvedValue({ embedding: { values: [1, 0] } });
+
+    const res = await request(app)
+      .post('/documents/search')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ query: 'test' });
+
+    expect(res.status).toBe(200);
+    const filenames = res.body.results.map((r: { filename: string }) => r.filename);
+    expect(filenames).toEqual(['alice.docx']);
   });
 });

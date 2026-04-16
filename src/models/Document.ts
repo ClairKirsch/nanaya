@@ -6,6 +6,7 @@ const documentSchema = new Schema({
   data: Buffer,
   uploadedAt: Date,
   processedAt: Date,
+  vector: [Number],
 });
 
 export const Document = model('Document', documentSchema);

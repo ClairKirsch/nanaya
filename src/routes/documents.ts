@@ -4,6 +4,8 @@ import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { STRIPPER_IMAGE } from '../container.js';
 import { Document } from '../models/Document.js';
 import { StripJob } from '../models/StripJob.js';
+import * as genai from '@google/generative-ai';
+import mammoth from 'mammoth';
 
 const CONTAINER_RUNTIME = process.env['CONTAINER_RUNTIME'] ?? 'runsc';
 
@@ -64,6 +66,40 @@ export function stripDocxMetadata(docxBase64: Buffer): Promise<Buffer> {
   });
 }
 
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
+  if (vecA.length === 0 || vecB.length === 0) {
+    throw new Error('Vectors must not be empty for cosine similarity');
+  }
+  if (vecA.length !== vecB.length) {
+    throw new Error('Vectors must be of the same length for cosine similarity');
+  }
+  const dotProduct = vecA.reduce((sum, a, i) => sum + a * vecB[i]!, 0);
+  const magnitudeA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
+  const magnitudeB = Math.sqrt(vecB.reduce((sum, b) => sum + b * b, 0));
+  return magnitudeA && magnitudeB ? dotProduct / (magnitudeA * magnitudeB) : 0;
+}
+
+export async function embedText(text: string): Promise<number[]> {
+  const client = new genai.GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
+  console.log('Embedding text with Gemini API...');
+  const model = await client.getGenerativeModel({
+    model: 'gemini-embedding-001',
+  });
+  const result = await model.embedContent(text);
+  if (
+    result.embedding.values.length === 0 ||
+    !result.embedding.values.every((v) => typeof v === 'number')
+  ) {
+    throw new Error('Failed to get embedding from Gemini API');
+  }
+  return result.embedding.values;
+}
+
+export async function extractText(wordDocument: Buffer): Promise<string> {
+  const result = await mammoth.extractRawText({ buffer: wordDocument });
+  return result.value;
+}
+
 async function processStripJob(
   jobId: string,
   userId: string,
@@ -73,11 +109,14 @@ async function processStripJob(
 ): Promise<void> {
   try {
     const strippedData = await stripDocxMetadata(Buffer.from(data, 'base64'));
+    const textContent = await extractText(strippedData);
+    const vector = await embedText(textContent);
     const document = new Document({
       userId,
       filename,
       data: strippedData,
       uploadedAt,
+      vector,
       processedAt: new Date(),
     });
     await document.save();
@@ -207,6 +246,83 @@ router.get('/strip/:jobId', authMiddleware, async (req: AuthRequest, res) => {
     documentId: job.documentId ?? undefined,
     error: job.error ?? undefined,
   });
+});
+
+/**
+ * @swagger
+ * /search:
+ *   post:
+ *     summary: Semantic search over documents
+ *     description: Embeds the query string and returns the user's documents ranked by cosine similarity.
+ *     tags:
+ *       - Documents
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - query
+ *             properties:
+ *               query:
+ *                 type: string
+ *                 description: Natural language search query
+ *     responses:
+ *       200:
+ *         description: Ranked list of matching documents
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 results:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       documentId:
+ *                         type: string
+ *                       filename:
+ *                         type: string
+ *                       similarity:
+ *                         type: number
+ *                         format: float
+ *                         minimum: -1
+ *                         maximum: 1
+ *       400:
+ *         description: Missing query in request body
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Embedding or search failed
+ */
+router.post('/search', authMiddleware, async (req: AuthRequest, res) => {
+  const { query } = req.body;
+  if (!query) {
+    return res.status(400).json({ error: 'Missing query in request body' });
+  }
+  try {
+    const queryVector = await embedText(query);
+    const documents = await Document.find(
+      { userId: req.userId },
+      { vector: 1, filename: 1 },
+      { limit: 100 }
+    );
+    const results = documents
+      .map((doc) => ({
+        documentId: doc._id,
+        filename: doc.filename,
+        similarity: cosineSimilarity(queryVector, doc.vector),
+      }))
+      .sort((a, b) => b.similarity - a.similarity);
+    return res.json({ results });
+  } catch (err) {
+    console.error('Error during search:', err);
+    return res.status(500).json({ error: 'Search failed' });
+  }
 });
 
 export default router;
