@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import argon2 from 'argon2';
 import { authMiddleware, type AuthRequest, type JwtPayload } from '../middleware/auth.js';
-import { User, toPublicUser } from '../models/User.js';
+import { User } from '../models/User.js';
 
 const router = Router();
 
@@ -31,9 +31,9 @@ const router = Router();
  *                   example: Failed to fetch users
  *
  */
-router.get('/', authMiddleware, (req: AuthRequest, res: Response) => {
-  User.find()
-    .then((users) => res.json(users.map(toPublicUser)))
+router.get('/', authMiddleware, (_req: AuthRequest, res: Response) => {
+  User.find({}, { password: 0, email: 0, name: 0 })
+    .then((users) => res.json(users))
     .catch(() => res.status(500).json({ error: 'Failed to fetch users' }));
 });
 
