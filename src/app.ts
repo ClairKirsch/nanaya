@@ -1,3 +1,4 @@
+import cors from 'cors';
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './swagger.js';
@@ -8,6 +9,7 @@ import commentRouter from './routes/comments.js';
 
 const app = express();
 
+app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:4200' }));
 app.use(express.json());
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
