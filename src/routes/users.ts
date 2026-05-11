@@ -55,6 +55,7 @@ router.get('/', authMiddleware, (_req: AuthRequest, res: Response) => {
  *               - teacher
  *               - email
  *               - password
+ *               - screen_name
  *             properties:
  *               name:
  *                 type: string

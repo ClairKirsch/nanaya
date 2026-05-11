@@ -146,7 +146,7 @@ const router = Router();
 
 /**
  * @swagger
- * /:
+ * /documents:
  *   post:
  *     summary: Upload a document
  *     description: Upload a new document associated with the authenticated user
@@ -207,7 +207,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
 
 /**
  * @swagger
- * /strip/{jobId}:
+ * /documents/strip/{jobId}:
  *   get:
  *     summary: Poll a strip job
  *     description: Returns the status of a metadata-strip job. When done, includes the documentId.
@@ -255,7 +255,7 @@ router.get('/strip/:jobId', authMiddleware, async (req: AuthRequest, res) => {
 
 /**
  * @swagger
- * /search:
+ * /documents/search:
  *   post:
  *     summary: Semantic search over documents
  *     description: Embeds the query string and returns documents ranked by cosine similarity.
@@ -333,7 +333,7 @@ router.post('/search', authMiddleware, async (req: AuthRequest, res) => {
 
 /**
  * @swagger
- * /random:
+ * /documents/random:
  *   get:
  *     summary: Get a random document
  *     description: Returns metadata for a randomly selected document from the entire database.
@@ -366,7 +366,7 @@ router.get('/random', authMiddleware, async (_req: AuthRequest, res) => {
 
 /**
  * @swagger
- * /:
+ * /documents:
  *   get:
  *     summary: List all documents
  *     description: Returns metadata for all documents on the platform.
@@ -411,7 +411,7 @@ router.get('/', authMiddleware, async (_req: AuthRequest, res) => {
 
 /**
  * @swagger
- * /my_documents:
+ * /documents/my_documents:
  *   get:
  *     summary: List your own documents
  *     description: Returns metadata for all documents uploaded by the authenticated user.
@@ -456,7 +456,7 @@ router.get('/my_documents', authMiddleware, async (req: AuthRequest, res) => {
 
 /**
  * @swagger
- * /by_user/{userId}:
+ * /documents/by_user/{userId}:
  *   get:
  *     summary: List documents by user
  *     description: Returns metadata for all documents uploaded by a specific user.
@@ -508,7 +508,7 @@ router.get('/by_user/:userId', authMiddleware, async (req: AuthRequest, res) => 
 
 /**
  * @swagger
- * /{documentId}:
+ * /documents/{documentId}:
  *   get:
  *     summary: Get a document by ID
  *     description: Returns metadata for a document owned by the authenticated user.
@@ -570,7 +570,7 @@ router.get('/:documentId', authMiddleware, async (req: AuthRequest, res) => {
 
 /**
  * @swagger
- * /{documentId}/download:
+ * /documents/{documentId}/download:
  *   get:
  *     summary: Download a document
  *     description: Returns the stripped DOCX file for any document.
@@ -613,7 +613,7 @@ router.get('/:documentId/download', authMiddleware, async (req: AuthRequest, res
 
 /**
  * @swagger
- * /{documentId}:
+ * /documents/{documentId}:
  *   delete:
  *     summary: Delete a document
  *     description: Permanently deletes a document. Only the owner can delete their own documents.

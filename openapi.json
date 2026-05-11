@@ -389,7 +389,7 @@
         }
       }
     },
-    "/": {
+    "/documents": {
       "post": {
         "summary": "Upload a document",
         "description": "Upload a new document associated with the authenticated user",
@@ -500,7 +500,7 @@
         }
       }
     },
-    "/strip/{jobId}": {
+    "/documents/strip/{jobId}": {
       "get": {
         "summary": "Poll a strip job",
         "description": "Returns the status of a metadata-strip job. When done, includes the documentId.",
@@ -558,7 +558,7 @@
         }
       }
     },
-    "/search": {
+    "/documents/search": {
       "post": {
         "summary": "Semantic search over documents",
         "description": "Embeds the query string and returns documents ranked by cosine similarity.",
@@ -634,7 +634,7 @@
         }
       }
     },
-    "/random": {
+    "/documents/random": {
       "get": {
         "summary": "Get a random document",
         "description": "Returns metadata for a randomly selected document from the entire database.",
@@ -671,7 +671,7 @@
         }
       }
     },
-    "/my_documents": {
+    "/documents/my_documents": {
       "get": {
         "summary": "List your own documents",
         "description": "Returns metadata for all documents uploaded by the authenticated user.",
@@ -719,7 +719,7 @@
         }
       }
     },
-    "/by_user/{userId}": {
+    "/documents/by_user/{userId}": {
       "get": {
         "summary": "List documents by user",
         "description": "Returns metadata for all documents uploaded by a specific user.",
@@ -778,7 +778,7 @@
         }
       }
     },
-    "/{documentId}": {
+    "/documents/{documentId}": {
       "get": {
         "summary": "Get a document by ID",
         "description": "Returns metadata for a document owned by the authenticated user.",
@@ -877,7 +877,7 @@
         }
       }
     },
-    "/{documentId}/download": {
+    "/documents/{documentId}/download": {
       "get": {
         "summary": "Download a document",
         "description": "Returns the stripped DOCX file for any document.",
@@ -966,7 +966,8 @@
                   "name",
                   "teacher",
                   "email",
-                  "password"
+                  "password",
+                  "screen_name"
                 ],
                 "properties": {
                   "name": {
