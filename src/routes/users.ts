@@ -41,6 +41,55 @@ router.get('/', authMiddleware, (_req: AuthRequest, res: Response) => {
 
 /**
  * @swagger
+ * /users/me:
+ *   get:
+ *     summary: Get the current user's profile
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Current user's profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 email:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 screen_name:
+ *                   type: string
+ *                 teacher:
+ *                   type: boolean
+ *                 twoFAEnabled:
+ *                   type: boolean
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Failed to fetch user
+ */
+router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await User.findById(req.userId, { password: 0, 'twoFactorDevices.secret': 0 });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    res.json({
+      email: user.email,
+      name: user.name,
+      screen_name: user.screen_name,
+      teacher: user.teacher,
+      twoFAEnabled: user.twoFactorDevices.some((d) => d.verified),
+    });
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+/**
+ * @swagger
  * /users:
  *   post:
  *     summary: Create a new user

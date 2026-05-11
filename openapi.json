@@ -1045,6 +1045,54 @@
         }
       }
     },
+    "/users/me": {
+      "get": {
+        "summary": "Get the current user's profile",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current user's profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "email": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "screen_name": {
+                      "type": "string"
+                    },
+                    "teacher": {
+                      "type": "boolean"
+                    },
+                    "twoFAEnabled": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "500": {
+            "description": "Failed to fetch user"
+          }
+        }
+      }
+    },
     "/users/login": {
       "post": {
         "summary": "Login user and get JWT token",
